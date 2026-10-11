@@ -1,12 +1,4 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex">
-</head>
-<body>
-<title>Junior's Budget</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body><title>Junior's Budget</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
@@ -116,18 +108,20 @@ function monthsText(m){if(m>1200)return 'more than 100 years';var y=Math.floor(m
   if(y===0)return pl(m,'month');if(mo===0)return pl(y,'year');return pl(y,'year')+', '+pl(mo,'month');}
 
 /* ---------- data ---------- */
-function blank(name){return {hasCar:null,id:uid(),name:name||'',created:new Date().toISOString().slice(0,10),incomes:[],
+function blank(name){return {hasCar:null,tax:null,spent:[],id:uid(),name:name||'',created:new Date().toISOString().slice(0,10),incomes:[],
   expenses:CATS.map(function(c){return {name:c[0],amount:0};}),extras:[],debts:[]};}
 function clean(b){
   if(!b||typeof b!=='object')return null;
   var arr=function(x){return Array.isArray(x)?x.slice(0,100):[];};
   var out=blank(str(b.name,60)||'Budget');
   out.hasCar=(b.hasCar===true||b.hasCar===false)?b.hasCar:null;out.id=str(b.id,40)||out.id;out.created=str(b.created,20)||out.created;
-  out.incomes=arr(b.incomes).map(function(i){i=i||{};return {name:str(i.name,60),freq:freqOf(i.freq).k,amount:num(i.amount)};});
+  out.incomes=arr(b.incomes).map(function(i){i=i||{};return {name:str(i.name,60),freq:freqOf(i.freq).k,amount:num(i.amount),gross:num(i.gross),stubDate:str(i.stubDate,10)};});
   var ex=arr(b.expenses);
   out.expenses=CATS.map(function(c){var f=ex.filter(function(e){return e&&e.name===c[0];})[0];return {name:c[0],amount:f?num(f.amount):0};});
   out.extras=arr(b.extras).map(function(e){e=e||{};return {name:str(e.name,60),amount:num(e.amount)};});
-  out.debts=arr(b.debts).map(function(d){d=d||{};return {type:(DTYPES.indexOf(d.type)>=0?d.type:'Other loan'),name:str(d.name,60),owed:num(d.owed),apr:num(d.apr),payment:num(d.payment),prepayExtra:num(d.prepayExtra),prepayLump:num(d.prepayLump)};});
+  out.debts=arr(b.debts).map(function(d){d=d||{};return {type:(DTYPES.indexOf(d.type)>=0?d.type:'Other loan'),name:str(d.name,60),owed:num(d.owed),apr:num(d.apr),payment:num(d.payment),prepayExtra:num(d.prepayExtra),prepayLump:num(d.prepayLump),aprGuess:d.aprGuess===true};});
+  var t=b.tax;out.tax=(t&&typeof t==='object')?{date:str(t.date,10),gross:num(t.gross),net:num(t.net),fedTax:num(t.fedTax),fedYtd:num(t.fedYtd),stTax:num(t.stTax),stYtd:num(t.stYtd),freq:freqOf(t.freq).k,other:num(t.other)}:null;
+  out.spent=Array.isArray(b.spent)?b.spent.slice(-1000).map(function(x){x=x||{};return {date:str(x.date,10),cat:str(x.cat,60),amount:num(x.amount)};}).filter(function(x){return x.cat&&x.amount>0;}):[];
   return out;}
 var db=[];var storageOk=true;
 function load(){try{var r=localStorage.getItem(KEY);if(r){var o=JSON.parse(r);if(o&&Array.isArray(o.budgets))db=o.budgets.map(clean).filter(Boolean);}}catch(e){storageOk=false;}}
@@ -153,8 +147,9 @@ function debtNote(d){
   var head=(d.name||'Debt')+': you owe '+money(d.owed)+'. ';
   if(d.payment<=0)return {tone:'bad',text:head+'No monthly payment is set, so this will not go away.'};
   var a=amortize(d.owed,d.apr,d.payment);
-  if(!a){var int=d.owed*d.apr/1200;return {tone:'bad',text:head+'Your payment of '+money(d.payment)+' does not even cover the interest (about '+money(int)+' a month). The debt will never shrink. Pay more than '+money(int)+' a month.'};}
-  return {tone:'ok',text:head+'At '+money(d.payment)+' a month, paid off in about '+monthsText(a.months)+(d.apr>0?'. You will pay about '+money(a.interest)+' in interest.':'.')};}
+  var est=d.aprGuess?' The interest rate ('+d.apr+'%) is an estimate. Check your statement and change it.':'';
+  if(!a){var int=d.owed*d.apr/1200;return {tone:'bad',text:head+'Your payment of '+money(d.payment)+' does not even cover the interest (about '+money(int)+' a month). The debt will never shrink. Pay more than '+money(int)+' a month.'+est};}
+  return {tone:'ok',text:head+'At '+money(d.payment)+' a month, paid off in about '+monthsText(a.months)+(d.apr>0?'. You will pay about '+money(a.interest)+' in interest.':'.')+est};}
 
 /* ---------- navigation ---------- */
 var cur=null,mode='new',hist=[],view=null,editSnap=null,draft={};
@@ -173,6 +168,7 @@ function ask(o){
     o.eyebrow?h('p',{class:'eyebrow',text:o.eyebrow}):null,
     h('h2',{text:o.title}),o.hint?h('p',{class:'hint',text:o.hint}):null,
     input?h('label',{for:input.id,class:'hint',text:o.label||''}):null,input,err,
+    o.guess?h('div',{},h('button',{type:'button',class:'ghost',onclick:o.guess.fn,text:"I don't know the rate"}),h('p',{class:'hint',text:"I will use "+o.guess.rate+"% as a stand-in. You can change it later."})):null,
     h('div',{class:'row'},h('button',{type:'button',class:'ghost',onclick:back,text:'Back'}),h('button',{type:'submit',text:o.nextLabel||'Next'})));
   app.append(form);if(input)setTimeout(function(){input.focus();},30);}
 function textIn(id,val,ph){return h('input',{type:'text',id:id,value:val||'',placeholder:ph||'',autocomplete:'off',maxlength:'60'});}
@@ -186,9 +182,9 @@ function editItem(o){
     for(var i=0;i<o.fields.length;i++){var f=o.fields[i],raw=inputs[f.key].value;
       if(f.kind==='text'){raw=raw.trim();if(!raw){err.textContent='Please fill in '+f.label.toLowerCase()+'.';inputs[f.key].focus();return;}vals[f.key]=raw.slice(0,60);}
       else if(f.kind==='freq'){vals[f.key]=raw;}
-      else{var n=parseNum(raw===''&&f.allowBlank?'0':raw);if(n===null||(f.max&&n>f.max)){err.textContent='Type just numbers for '+f.label.toLowerCase()+', like 50 or 50.50.';inputs[f.key].focus();return;}vals[f.key]=n;}}
+      else{var n=parseNum(raw===''&&f.allowBlank?'0':raw);if(n===null||(f.max&&n>f.max)){err.textContent='Type just numbers for '+f.label.toLowerCase()+', like 50 or 50.50.';inputs[f.key].focus();return;}if(f.positive&&n<=0){err.textContent='You have a car, so this needs an amount above $0.';inputs[f.key].focus();return;}vals[f.key]=n;}}
     var c=o.check?o.check(vals):null;
-    if(c)go(confirmScreen,{text:c.text,warn:c.warn,yesLabel:c.yesLabel,yes:function(){o.apply(vals);hist.pop();back();}});
+    if(c)go(confirmScreen,dupOpts(c,function(){o.apply(vals);hist.pop();back();},function(){if(o.skip)o.skip();hist.pop();back();}));
     else{o.apply(vals);back();}}},
     h('p',{class:'eyebrow',text:o.eyebrow||'Change'}),h('h2',{text:o.title}),o.hint?h('p',{class:'hint',text:o.hint}):null,
     o.fields.map(function(f,idx){var inp;
@@ -201,16 +197,27 @@ function editItem(o){
 function confirmScreen(o){
   app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Check'}),h('h2',{text:'Does this look right?'}),h('p',{text:o.text}),
     o.warn?h('p',{class:'warn',text:o.warn}):null,
-    h('div',{class:'stack'},h('button',{class:'green',onclick:o.yes,text:o.yesLabel||"Yes, that's right"}),h('button',{class:'ghost',onclick:back,text:'No, let me fix it'}))));}
+    h('div',{class:'stack'},o.same?h('button',{class:'green',onclick:o.same,text:o.sameLabel}):null,h('button',{class:o.same?'':'green',onclick:o.yes,text:o.yesLabel||"Yes, that's right"}),h('button',{class:'ghost',onclick:back,text:'No, let me fix it'}))));}
+function dupOpts(c,yesFn,skipFn){var o={text:c.text,warn:c.warn,yesLabel:c.yesLabel,yes:yesFn};
+  if(c.sameLabel){o.sameLabel=c.sameLabel;o.same=function(){if(c.sameDo)c.sameDo();(c.skip?skipFn:yesFn)();};}
+  return o;}
 function jobLimit(name){var n=String(name||'').toLowerCase();
   if(/bus/.test(n)&&/(assistant|aide|monitor|attendant)/.test(n))return {label:'an assistant bus driver',max:40000,note:'about $40,000 a year'};
   if(/bus\s*driver/.test(n))return {label:'a bus driver',max:29*2080,note:'about $29 an hour, or '+money(29*2080)+' a year'};
   return null;}
 function incomeCheck(it){
-  var f=freqOf(it.freq),yr=it.amount*f.mult*12;var lim=jobLimit(it.name);
-  var t=money(it.amount)+' '+f.label.toLowerCase()+' adds up to about '+money(yr)+' a year.';
-  var w=(lim&&yr>lim.max)?('That is more than '+lim.label+' usually makes ('+lim.note+'). Check the amount, and check that you picked how often you are paid correctly.'):null;
-  return {text:t,warn:w};}
+  var f=freqOf(it.freq),yr=it.amount*f.mult*12,gy=(it.gross>0?it.gross:it.amount)*f.mult*12;var lim=jobLimit(it.name);
+  var t=money(it.amount)+' '+f.label.toLowerCase()+' adds up to about '+money(yr)+' a year take-home'+(it.gross>0?' ('+money(gy)+' before taxes)':'')+'.';
+  var ws=[];
+  if(lim&&gy>lim.max)ws.push('That is more than '+lim.label+' usually makes ('+lim.note+'). Check the amount, and check that you picked how often you are paid correctly.');
+  if(it.gross>0){
+    if(it.amount>it.gross)ws.push('Take-home pay is more than gross pay. Take-home is the smaller number, after taxes.');
+    else if(it.amount<it.gross*0.6)ws.push('Take-home is less than 60% of gross pay. Check both numbers on the stub.');}
+  if(it.stubFreq&&it.stubFreq!==it.freq)ws.push('Your stub says '+freqOf(it.stubFreq).label.toLowerCase()+' but you picked '+freqOf(it.freq).label.toLowerCase()+'. One of them is wrong.');
+  if(it.stubDate){var dd=new Date(it.stubDate+'T12:00:00'),days=(Date.now()-dd.getTime())/864e5;
+    if(days>45)ws.push('This stub is more than 6 weeks old. Use your most recent one if you have it.');
+    else if(days<-1)ws.push('The stub date is in the future. Check the date.');}
+  return {text:t,warn:ws.length?ws.join(' '):null};}
 function vehicleLike(t){return /(\bcar\b|auto|truck|vehicle|\bsuv\b)/i.test(t||'');}
 function payLike(t){return /(payment|loan|note|lease|financ|installment|credit card|\bcard\b|debt)/i.test(t||'');}
 function normName(t){return String(t||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
@@ -222,34 +229,35 @@ function sameThing(expName,d){
   return (vehicleLike(expName)&&vehicleLike(dn))||(/card/i.test(expName)&&/card/i.test(dn))||(/student/i.test(expName)&&/student/i.test(dn));}
 function dupForExtra(name){
   for(var i=0;i<cur.debts.length;i++){var d=cur.debts[i];
-    if(sameThing(name,d))return {text:'You already have "'+d.name+'" under Debts. Its payment of '+money(d.payment)+' a month is counted as an expense automatically.',warn:'Adding "'+name+'" as an expense too would count it twice.',yesLabel:'Add it anyway, it is different'};}
+    if(sameThing(name,d))return {text:'You already have "'+d.name+'" under Debts. Its payment of '+money(d.payment)+' a month is counted as an expense automatically.',warn:'Adding "'+name+'" as an expense too would count it twice.',yesLabel:'No, it is different. Add it anyway',sameLabel:'Same thing: do not add it as an expense',skip:true};}
   return null;}
 function dupForDebt(d){
   for(var i=0;i<cur.extras.length;i++){var e=cur.extras[i];
-    if(sameThing(e.name,d))return {text:'You already have "'+e.name+'" under Expenses ('+money(e.amount)+' a month). A debt payment is counted as an expense automatically.',warn:'Adding "'+d.name+'" as a debt too would count it twice.',yesLabel:'Add it anyway, it is different'};}
+    if(sameThing(e.name,d))return {text:'You already have "'+e.name+'" under Expenses ('+money(e.amount)+' a month). A debt payment is counted as an expense automatically.',warn:'Adding "'+d.name+'" as a debt too would count it twice.',yesLabel:'No, it is different. Add it anyway',sameLabel:'Same thing: keep the debt, remove "'+e.name+'" from expenses',sameDo:(function(k){return function(){cur.extras.splice(k,1);};})(i)};}
   return null;}
 function editIncome(i){var it=cur.incomes[i];
   go(editItem,{eyebrow:'Income',title:'Change this income',fields:[{key:'name',label:'Name',kind:'text',value:it.name},{key:'freq',label:'How often paid',kind:'freq',value:it.freq},{key:'amount',label:'Each paycheck',kind:'num',value:it.amount}],
-    check:incomeCheck,apply:function(v){cur.incomes[i]={name:v.name,freq:v.freq,amount:v.amount};}});}
+    check:incomeCheck,apply:function(v){cur.incomes[i]={name:v.name,freq:v.freq,amount:v.amount,gross:it.gross||0,stubDate:it.stubDate||''};}});}
 function editCat(i){var e=cur.expenses[i];
-  go(editItem,{eyebrow:'Expenses',title:e.name,hint:'How much per month? (For car insurance paid every 6 months or once a year, divide it by 6 or 12.)',fields:[{key:'amount',label:'Dollars per month',kind:'num',value:e.amount,allowBlank:true}],apply:function(v){cur.expenses[i].amount=v.amount;}});}
+  go(editItem,{eyebrow:'Expenses',title:e.name,hint:'How much per month? (For car insurance paid every 6 months or once a year, divide it by 6 or 12.)',fields:[{key:'amount',label:'Dollars per month',kind:'num',value:e.amount,allowBlank:true,positive:!!(cur.hasCar&&/^Car (gas|insurance|maintenance)$/.test(e.name))}],apply:function(v){cur.expenses[i].amount=v.amount;}});}
 function editExtra(i){var e=cur.extras[i];
-  go(editItem,{eyebrow:'Expenses',title:'Change this expense',fields:[{key:'name',label:'Name',kind:'text',value:e.name},{key:'amount',label:'Dollars per month',kind:'num',value:e.amount,allowBlank:true}],check:function(v){return dupForExtra(v.name);},apply:function(v){cur.extras[i]={name:v.name,amount:v.amount};}});}
+  go(editItem,{eyebrow:'Expenses',title:'Change this expense',fields:[{key:'name',label:'Name',kind:'text',value:e.name},{key:'amount',label:'Dollars per month',kind:'num',value:e.amount,allowBlank:true}],check:function(v){return dupForExtra(v.name);},apply:function(v){cur.extras[i]={name:v.name,amount:v.amount};},skip:function(){cur.extras.splice(i,1);}});}
 function editDebt(i){var d=cur.debts[i];
   go(editItem,{eyebrow:'Debts',title:'Change this debt',hint:'APR (annual percentage rate) is the yearly cost of borrowing, as a percent.',fields:[{key:'name',label:'Name',kind:'text',value:d.name},{key:'owed',label:'Total owed',kind:'num',value:d.owed},{key:'apr',label:'Interest rate (APR) %',kind:'num',value:d.apr,allowBlank:true,max:1000},{key:'payment',label:'Monthly payment',kind:'num',value:d.payment}],
-    check:function(v){return dupForDebt({name:v.name,type:d.type});},apply:function(v){cur.debts[i]={type:d.type,name:v.name,owed:v.owed,apr:v.apr,payment:v.payment,prepayExtra:d.prepayExtra||0,prepayLump:d.prepayLump||0};}});}
+    check:function(v){return dupForDebt({name:v.name,type:d.type});},apply:function(v){cur.debts[i]={type:d.type,name:v.name,owed:v.owed,apr:v.apr,aprGuess:(d.aprGuess===true&&v.apr===d.apr),payment:v.payment,prepayExtra:d.prepayExtra||0,prepayLump:d.prepayLump||0};}});}
 
 /* ---------- home ---------- */
+var VERSION='1.0';
 function home(){
   hist=[];view=null;cur=null;editSnap=null;app.textContent='';
-  app.append(h('h1',{text:"Junior's Budget"}),h('p',{class:'hint',text:'Plan what comes in and what goes out. Your budgets are saved only on this phone.'}));
+  app.append(h('h1',{text:"Junior's Budget"}),h('p',{class:'hint',text:'Plan what comes in and what goes out. Your budgets are saved only on this phone.'}),h('p',{class:'hint',text:'Use your own phone so your budgets stay private.'}));
   if(!storageOk)app.append(h('div',{class:'card warn'},h('p',{text:'This phone is not letting the page save. Use Save a backup so you do not lose your budgets.'})));
   var list=h('div',{class:'stack'});
   db.forEach(function(b){list.append(budgetRow(b));});
   if(!db.length)list.append(h('p',{class:'hint',text:'No budgets yet. Tap New budget to make your first one.'}));
   app.append(h('div',{class:'card'},h('h2',{text:'Your budgets'}),list),
     h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'})),
-    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app. Nobody else can see your budgets.'}));}
+    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app. Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}));}
 function budgetRow(b){
   var c=compute(b);var row=h('div',{class:'stack'});
   function normal(){row.textContent='';
@@ -278,16 +286,38 @@ function incomeMore(){
 function incName(){var i=textIn('f-inc',draft.inc.name,'Example: My job');
   ask({eyebrow:'Income',title:'Where does this money come from?',hint:'Examples: My job, SSI, Allowance.',input:i,label:'Name',onNext:function(v){v=v.trim();if(!v)return 'Please type something.';draft.inc.name=v.slice(0,60);go(incFreq);}});}
 function incFreq(){app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Income'}),h('h2',{text:'How often are you paid?'}),
-  h('div',{class:'stack'},FREQ.map(function(f){return h('button',{class:'choice',onclick:function(){draft.inc.freq=f.k;go(incAmt);},text:f.label});}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
+  h('div',{class:'stack'},FREQ.map(function(f){return h('button',{class:'choice',onclick:function(){draft.inc.freq=f.k;go(incStubQ);},text:f.label});}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
+function incStubQ(){app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Income'}),h('h2',{text:'Do you have a pay stub?'}),
+  h('p',{class:'hint',text:'A pay stub shows what you earned and what you took home. Use your most recent one so we can check your take-home pay.'}),
+  h('div',{class:'stack'},h('button',{class:'choice',onclick:function(){go(incStub);},text:'Yes, I have my latest pay stub'}),h('button',{class:'choice',onclick:function(){draft.inc.gross=0;draft.inc.stubDate='';draft.inc.stubFreq='';go(incAmt);},text:'No stub (SSI, allowance, cash)'}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
+function incStub(){var err=h('div',{class:'err',role:'alert'});
+  var gi=numIn('f-sg',draft.inc.gross||'','Example: 600'),ni=numIn('f-sn',draft.inc.amount||'','Example: 480');
+  var di=h('input',{type:'date',id:'f-sd',value:draft.inc.stubDate||''});
+  var fs=h('select',{id:'f-sf'},FREQ.map(function(q){return h('option',{value:q.k,selected:q.k===(draft.inc.stubFreq||draft.inc.freq),text:q.label});}));
+  var form=h('form',{class:'card',onsubmit:function(ev){ev.preventDefault();
+    var g=parseNum(gi.value),n=parseNum(ni.value);
+    if(g===null||g<=0){err.textContent='Type the gross pay from the stub, like 600 or 600.50.';gi.focus();return;}
+    if(n===null||n<=0){err.textContent='Type the take-home (net) pay from the stub, like 480 or 480.50.';ni.focus();return;}
+    var it={name:draft.inc.name,freq:draft.inc.freq,amount:n,gross:g,stubDate:di.value||'',stubFreq:fs.value},c=incomeCheck(it);
+    delete it.stubFreq;
+    go(confirmScreen,{text:c.text,warn:c.warn,yes:function(){cur.incomes.push(it);finishItem(incomeMore,draft.base);}});}},
+    h('p',{class:'eyebrow',text:'Income'}),h('h2',{text:'Type what your pay stub says'}),
+    h('p',{class:'hint',text:'Use your most recent stub.'}),
+    h('div',{class:'fld'},h('label',{for:'f-sg',text:'Gross pay (before taxes)'}),gi),
+    h('div',{class:'fld'},h('label',{for:'f-sn',text:'Take-home pay (net, after taxes)'}),ni),
+    h('div',{class:'fld'},h('label',{for:'f-sd',text:'Pay date on the stub (optional)'}),di),
+    h('div',{class:'fld'},h('label',{for:'f-sf',text:'How often does the stub say you are paid?'}),fs),
+    err,h('div',{class:'row'},h('button',{type:'button',class:'ghost',onclick:back,text:'Back'}),h('button',{type:'submit',text:'Next'})));
+  app.append(form);}
 function incAmt(){var i=numIn('f-incamt',draft.inc.amount,'Example: 250.50');
   ask({eyebrow:'Income',title:'How much is each paycheck?',hint:'Type the amount you actually receive each time.',input:i,label:'Dollars',onNext:function(v){var n=parseNum(v);if(n===null)return 'Type just numbers, like 250 or 250.50.';
-    var it={name:draft.inc.name,freq:draft.inc.freq,amount:n},c=incomeCheck(it);go(confirmScreen,{text:c.text,warn:c.warn,yes:function(){cur.incomes.push(it);finishItem(incomeMore,draft.base);}});}});}
-function afterIncome(){if(mode==='edit')finishEdit();else adv(0);}
+    var it={name:draft.inc.name,freq:draft.inc.freq,amount:n,gross:0,stubDate:''},c=incomeCheck(it);go(confirmScreen,{text:c.text,warn:c.warn,yes:function(){cur.incomes.push(it);finishItem(incomeMore,draft.base);}});}});}
+function afterIncome(){if(mode==='edit')finishEdit();else go(taxIntro);}
 /* expenses */
 var EXSTEPS=[{k:'cat',n:'Rent or room'},{k:'cat',n:'Food and groceries'},
   {k:'grp',id:'util',title:'Utilities',hint:'Fill in the bills you have. Leave a bill blank, or type 0, if you do not pay it.',names:['Electric','Gas (home)','Water','Trash','Phone','Internet','Cable or streaming']},
   {k:'cat',n:'Getting around'},{k:'carq'},
-  {k:'grp',id:'car',title:'Car costs',hint:'Leave blank or type 0 for any you do not pay.',names:['Car gas','Car insurance','Car maintenance']},
+  {k:'grp',id:'car',title:'Car costs',hint:'Since you have a car, fill in all three. Each must be more than $0.',names:['Car gas','Car insurance','Car maintenance']},
   {k:'cat',n:'Fun'},{k:'cat',n:'Savings'},{k:'cat',n:'Other'}];
 function catIndex(nm){for(var i=0;i<CATS.length;i++)if(CATS[i][0]===nm)return i;return -1;}
 function adv(si){
@@ -315,7 +345,7 @@ function groupForm(si){var st=EXSTEPS[si],inputs={},sel=null;var err=h('div',{cl
     return h('div',{class:'fld'},h('label',{for:'g-'+k,text:lab}),CATS[k][1]?h('p',{class:'hint',style:'margin:0 0 6px',text:CATS[k][1]}):null,inp,extra,tip);});
   var form=h('form',{class:'card',onsubmit:function(ev){ev.preventDefault();var vals={};
       for(var q=0;q<st.names.length;q++){var nm=st.names[q],raw=inputs[nm].value.trim(),n=parseNum(raw===''?'0':raw);
-        if(n===null){err.textContent='Type just numbers for '+nm.toLowerCase()+', like 50 or 50.50.';inputs[nm].focus();return;}vals[nm]=n;}
+        if(n===null){err.textContent='Type just numbers for '+nm.toLowerCase()+', like 50 or 50.50.';inputs[nm].focus();return;}if(st.id==='car'&&n<=0){err.textContent='You have a car, so '+nm.toLowerCase()+' needs an amount above $0.'+(nm==='Car maintenance'?' Tip: use $25 a month.':'');inputs[nm].focus();return;}vals[nm]=n;}
       st.names.forEach(function(nm){var k=catIndex(nm),n=vals[nm];if(nm==='Car insurance'){n=Math.round(n/Number(sel.value)*100)/100;}cur.expenses[k].amount=n;});
       adv(si+1);}},
     h('p',{class:'eyebrow',text:'Expenses'}),h('h2',{text:st.title}),h('p',{class:'hint',text:st.hint+' Amounts are per month.'}),fields,err,
@@ -332,7 +362,7 @@ function expMore(){
 function exName(){var i=textIn('f-exn',draft.ex.name,'Example: Haircuts');
   ask({eyebrow:'Expenses',title:'What else do you pay for?',hint:'Example: Haircuts, Pet food.',input:i,label:'Name',onNext:function(v){v=v.trim();if(!v)return 'Please type something.';draft.ex.name=v.slice(0,60);go(exAmt);}});}
 function exAmt(){var i=numIn('f-exa',draft.ex.amount,'Example: 20');
-  ask({eyebrow:'Expenses',title:'How much per month?',input:i,label:'Dollars per month',onNext:function(v){var n=parseNum(v);if(n===null)return 'Type just numbers, like 20 or 20.50.';var it={name:draft.ex.name,amount:n},c=dupForExtra(it.name);function fin(){cur.extras.push(it);finishItem(draft.exMore||expMore,draft.base);}if(c)go(confirmScreen,{text:c.text,warn:c.warn,yesLabel:c.yesLabel,yes:fin});else fin();}});}
+  ask({eyebrow:'Expenses',title:'How much per month?',input:i,label:'Dollars per month',onNext:function(v){var n=parseNum(v);if(n===null)return 'Type just numbers, like 20 or 20.50.';var it={name:draft.ex.name,amount:n},c=dupForExtra(it.name);function fin(){cur.extras.push(it);finishItem(draft.exMore||expMore,draft.base);}function skp(){finishItem(draft.exMore||expMore,draft.base);}if(c)go(confirmScreen,dupOpts(c,fin,skp));else fin();}});}
 function expList(){
   app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Expenses'}),h('h2',{text:'Your monthly expenses'}),h('p',{class:'hint',text:'Tap Edit to change an amount.'}),
     h('ul',{class:'list'},cur.expenses.map(function(e,k){return (cur.hasCar===false&&isCar(k))?null:rowEl(e.name+': '+money(e.amount),function(){editCat(k);});}).filter(Boolean).concat(cur.extras.map(function(e,k){return rowEl(e.name+': '+money(e.amount),function(){editExtra(k);});}))),
@@ -346,7 +376,7 @@ function afterExpenses(){if(mode==='edit')finishEdit();else go(debtMore);}
 /* debts */
 function debtMore(){
   app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Debts'}),h('h2',{text:cur.debts.length?'Your debts':'Any debt?'}),
-    cur.debts.length?h('ul',{class:'list'},cur.debts.map(function(d,k){return rowEl(d.name+': owe '+money(d.owed)+', '+d.apr+'% APR, pay '+money(d.payment)+' a month',function(){editDebt(k);});})):h('p',{class:'hint',text:'Do you owe money on anything? (loans, credit cards, phone payments)'}),
+    cur.debts.length?h('ul',{class:'list'},cur.debts.map(function(d,k){return rowEl(d.name+': owe '+money(d.owed)+', '+d.apr+'% APR'+(d.aprGuess?' (estimate)':'')+', pay '+money(d.payment)+' a month',function(){editDebt(k);});})):h('p',{class:'hint',text:'Do you owe money on anything? (loans, credit cards, phone payments)'}),
     h('div',{class:'stack'},
       h('button',{onclick:function(){draft.base=baseFor(debtMore);draft.d={};go(dType);},text:cur.debts.length?'Add another':'Yes, add a debt'}),
       h('button',{class:'green',onclick:finishAll,text:cur.debts.length?"I'm done with debts":'No, show my budget'}),
@@ -360,17 +390,117 @@ function dName(){var i=textIn('f-dn',draft.d.name,'Example: Phone');
   ask({eyebrow:'Debts',title:'What is this debt?',hint:'Examples: Phone, Credit card, Car loan.',input:i,label:'Name',onNext:function(v){v=v.trim();if(!v)return 'Please type something.';draft.d.name=v.slice(0,60);go(dOwed);}});}
 function dOwed(){var i=numIn('f-do',draft.d.owed,'Example: 600');var cc=draft.d.type==='Credit card';
   ask({eyebrow:'Debts',title:cc?'Card balance right now?':'Total owed right now?',hint:cc?'How much is on the card right now? Look at your latest statement.':'How much would it cost to pay it all off today?',input:i,label:'Dollars',onNext:function(v){var n=parseNum(v);if(n===null)return 'Type just numbers, like 600 or 600.50.';draft.d.owed=n;go(dApr);}});}
-function dApr(){var i=numIn('f-da',draft.d.apr,'Example: 24');
-  ask({eyebrow:'Debts',title:'Interest rate (APR)?',hint:'APR (annual percentage rate) is the yearly cost of borrowing, as a percent. Look on your statement or ask a trusted adult. Type 0 if none.',input:i,label:'Percent',onNext:function(v){var n=parseNum(v===''?'0':v);if(n===null||n>1000)return 'Type just a number, like 24 or 0.';draft.d.apr=n;go(dPay);}});}
+var GUESS={'Credit card':29.99,'Car loan':8.99};
+function dApr(){var i=numIn('f-da',draft.d.apr,'Example: 24');var gr=GUESS[draft.d.type];
+  ask({guess:gr?{rate:gr,fn:function(){draft.d.apr=gr;draft.d.aprGuess=true;go(dPay);}}:null,eyebrow:'Debts',title:'Interest rate (APR)?',hint:'APR (annual percentage rate) is the yearly cost of borrowing, as a percent. Look on your statement or ask a trusted adult. Type 0 if none.',input:i,label:'Percent',onNext:function(v){var n=parseNum(v===''?'0':v);if(n===null||n>1000)return 'Type just a number, like 24 or 0.';draft.d.apr=n;draft.d.aprGuess=false;go(dPay);}});}
 function dPay(){var i=numIn('f-dp',draft.d.payment,'Example: 50');
   ask({eyebrow:'Debts',title:'Monthly payment?',hint:draft.d.type==='Credit card'?'How much do you pay on this card each month? Paying more than the minimum saves a lot of interest.':'How much do you pay on this each month?',input:i,label:'Dollars per month',onNext:function(v){var n=parseNum(v);if(n===null)return 'Type just numbers, like 50 or 50.50.';
-    var it={type:draft.d.type||'Other loan',name:draft.d.name,owed:draft.d.owed,apr:draft.d.apr,payment:n,prepayExtra:0,prepayLump:0},c=dupForDebt(it);function fin(){cur.debts.push(it);finishItem(debtMore,draft.base);}if(c)go(confirmScreen,{text:c.text,warn:c.warn,yesLabel:c.yesLabel,yes:fin});else fin();}});}
+    var it={type:draft.d.type||'Other loan',name:draft.d.name,owed:draft.d.owed,apr:draft.d.apr,aprGuess:draft.d.aprGuess===true,payment:n,prepayExtra:0,prepayLump:0},c=dupForDebt(it);function fin(){cur.debts.push(it);finishItem(debtMore,draft.base);}if(c)go(confirmScreen,dupOpts(c,fin));else fin();}});}
 function finishAll(){if(mode==='edit')finishEdit();else{upsert(cur);mode='edit';jump(result);}}
 function finishEdit(){editSnap=null;upsert(cur);jump(result);}
 
+/* ---------- income tax check ---------- */
+var FEDB=[[12400,.10],[50400,.12],[105700,.22],[201775,.24],[256225,.32],[640600,.35],[Infinity,.37]],FED_STD=16100;
+var CAB=[[11079,.01],[26264,.02],[41452,.04],[57542,.06],[72724,.08],[371479,.093],[445771,.103],[742953,.113],[Infinity,.123]],CA_STD=5706,CA_CREDIT=153;
+function bracketTax(x,B){var t=0,lo=0;for(var i=0;i<B.length;i++){var hi=B[i][0];if(x>lo)t+=(Math.min(x,hi)-lo)*B[i][1];lo=hi;}return t;}
+function yearFrac(dateStr){var d=new Date(dateStr+'T12:00:00'),y=d.getFullYear(),a=new Date(y,0,1,12),z=new Date(y+1,0,1,12);
+  return (Math.round((d-a)/864e5)+1)/Math.round((z-a)/864e5);}
+function taxCalc(t){var per=freqOf(t.freq).mult*12,wages=t.gross*per,inc=wages+(t.other||0),frac=yearFrac(t.date);
+  var fed=bracketTax(Math.max(0,inc-FED_STD),FEDB),st=Math.max(0,bracketTax(Math.max(0,inc-CA_STD),CAB)-CA_CREDIT);
+  var pf=t.fedYtd/frac,ps=t.stYtd/frac,due=fed+st,diff=due-(pf+ps);
+  return {inc:inc,fed:fed,st:st,pf:pf,ps:ps,due:due,diff:diff,frac:frac,close:Math.abs(diff)<Math.max(200,0.1*due)};}
+function taxIntro(){app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Income tax'}),h('h2',{text:'Want to check your income tax?'}),
+  h('p',{class:'hint',text:'Have your most recent pay stub handy. I will see if you may owe money when you file your taxes.'}),
+  h('div',{class:'stack'},h('button',{onclick:function(){go(taxForm);},text:'Yes, check my taxes'}),h('button',{class:'ghost',onclick:function(){adv(0);},text:'Skip for now'}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
+function taxForm(){var t=cur.tax,inc0=null;
+  cur.incomes.forEach(function(i){if(!inc0&&i.gross>0)inc0=i;});if(!inc0)inc0=cur.incomes[0]||null;
+  var v=t||{date:inc0?inc0.stubDate:'',gross:inc0?inc0.gross:0,net:inc0&&inc0.gross>0?inc0.amount:0,fedTax:0,fedYtd:0,stTax:0,stYtd:0,freq:inc0?inc0.freq:'month',other:0};
+  var err=h('div',{class:'err',role:'alert'});
+  var di=h('input',{type:'date',id:'x-date',value:v.date||''});
+  var F=[['gross','Gross pay (this check)'],['net','Net pay, take-home (this check)'],['fedTax','Federal income tax (this check)'],['fedYtd','Federal income tax to date (year to date)'],['stTax','California income tax (this check)'],['stYtd','California income tax to date (year to date)']];
+  var ins={};F.forEach(function(f){ins[f[0]]=numIn('x-'+f[0],v[f[0]]||'','0');});
+  var fs=h('select',{id:'x-freq'},FREQ.map(function(q){return h('option',{value:q.k,selected:q.k===v.freq,text:q.label});}));
+  var oi=numIn('x-other',v.other||'','0');
+  var form=h('form',{class:'card',onsubmit:function(ev){ev.preventDefault();
+    var o={date:di.value,freq:fs.value},yr=new Date().getFullYear();
+    if(!o.date){err.textContent='Type the pay date from the stub.';di.focus();return;}
+    var dd=new Date(o.date+'T12:00:00');
+    if(dd.getFullYear()!==yr){err.textContent='Use a pay stub dated '+yr+'. The "to date" numbers must be for this year.';di.focus();return;}
+    if(dd.getTime()>Date.now()+864e5){err.textContent='That date is in the future. Check the date on the stub.';di.focus();return;}
+    for(var k=0;k<F.length;k++){var key=F[k][0],raw=ins[key].value.trim(),n=parseNum(raw===''&&key!=='gross'&&key!=='net'?'0':raw);
+      if(n===null){err.textContent='Type just numbers for "'+F[k][1].toLowerCase()+'", like 50 or 50.50. Type 0 if the stub shows none.';ins[key].focus();return;}o[key]=n;}
+    var ro=oi.value.trim(),on=parseNum(ro===''?'0':ro);if(on===null){err.textContent='Type just numbers for other income, like 5000.';oi.focus();return;}o.other=on;
+    if(o.gross<=0||o.net<=0){err.textContent='Gross pay and take-home pay must be more than 0.';ins.gross.focus();return;}
+    if(o.net>o.gross){err.textContent='Take-home (net) pay is the smaller number. It cannot be more than gross pay.';ins.net.focus();return;}
+    if(o.fedYtd<o.fedTax){err.textContent='Federal tax to date cannot be smaller than federal tax on this check.';ins.fedYtd.focus();return;}
+    if(o.stYtd<o.stTax){err.textContent='California tax to date cannot be smaller than California tax on this check.';ins.stYtd.focus();return;}
+    cur.tax=o;go(taxResult);}},
+    h('p',{class:'eyebrow',text:'Income tax'}),h('h2',{text:'Read your pay stub'}),h('p',{class:'hint',text:'Use your most recent stub. Type 0 for anything the stub does not show.'}),
+    h('div',{class:'fld'},h('label',{for:'x-date',text:'Pay date'}),di),
+    F.map(function(f){return h('div',{class:'fld'},h('label',{for:'x-'+f[0],text:f[1]}),ins[f[0]]);}),
+    h('div',{class:'fld'},h('label',{for:'x-freq',text:'How often are you paid?'}),fs),
+    h('div',{class:'fld'},h('label',{for:'x-other',text:'Other taxable income this year (optional)'}),h('p',{class:'hint',style:'margin:0 0 6px',text:'Another job or other money that gets taxed, for the whole year. SSI is not taxed. Leave blank if none.'}),oi),
+    err,h('div',{class:'row'},h('button',{type:'button',class:'ghost',onclick:back,text:'Back'}),h('button',{type:'submit',text:'See my estimate'})));
+  app.append(form);}
+function taxResult(){var t=cur.tax,c=taxCalc(t);var owe=c.diff>0;
+  app.append(h('h1',{text:'Income tax estimate'}));
+  if(c.close)app.append(h('div',{class:'banner',style:'background:var(--orange)',role:'status',text:'Too close to call: about '+money(Math.abs(c.diff))+' either way'}));
+  else app.append(h('div',{class:'banner '+(owe?'bad':'good'),role:'status',text:owe?'You may OWE about '+money(c.diff):'You may GET BACK about '+money(-c.diff)}));
+  var warns=[];
+  if(c.frac<0.1)warns.push('The year has just started, so this guess is rough. Check again with a later pay stub.');
+  if(c.close)warns.push('Your tax withheld is close to your estimated tax, so small changes could flip the answer.');
+  if(t.other>0)warns.push('Tax withheld from your other income is not counted here, so your real answer may be better.');
+  warns.push('This is a guess for one year, not tax advice. It does not include credits, deductions or pre-tax savings. Ask a trusted adult or a tax preparer before you file.');
+  app.append(h('div',{class:'card'},
+    h('div',{class:'money'},h('span',{text:'Pay for the year (estimate)'}),h('b',{text:money(c.inc)})),
+    h('div',{class:'money'},h('span',{text:'Federal tax you will owe'}),h('b',{text:money(c.fed)})),
+    h('div',{class:'money'},h('span',{text:'Federal tax withheld by year end'}),h('b',{text:money(c.pf)})),
+    h('div',{class:'money'},h('span',{text:'California tax you will owe'}),h('b',{text:money(c.st)})),
+    h('div',{class:'money'},h('span',{text:'California tax withheld by year end'}),h('b',{text:money(c.ps)}))));
+  app.append(h('div',{class:'card'},warns.map(function(w){return h('p',{class:'warn',text:w});})));
+  app.append(h('div',{class:'stack'},
+    h('button',{class:'green',onclick:function(){if(mode==='edit')finishEdit();else adv(0);},text:'Done'}),
+    h('button',{class:'ghost',onclick:back,text:'Change my numbers'})));}
+
+/* ---------- spending tracker ---------- */
+function todayStr(){var d=new Date(),p=function(n){return (n<10?'0':'')+n;};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
+function planFor(cat){for(var i=0;i<cur.expenses.length;i++)if(cur.expenses[i].name===cat)return cur.expenses[i].amount;
+  for(var j=0;j<cur.extras.length;j++)if(cur.extras[j].name===cat)return cur.extras[j].amount;return 0;}
+function spentIn(cat,month){var t=0;cur.spent.forEach(function(x){if(x.cat===cat&&x.date.slice(0,7)===month)t+=x.amount;});return t;}
+function trackCats(){var o=[];cur.expenses.forEach(function(e,k){if(!(cur.hasCar===false&&isCar(k)))o.push(e.name);});cur.extras.forEach(function(e){if(o.indexOf(e.name)<0)o.push(e.name);});return o;}
+function trackHome(){var mo=todayStr().slice(0,7),rows=[];
+  trackCats().forEach(function(c){var p=planFor(c),sp=spentIn(c,mo);if(p>0||sp>0)rows.push({c:c,p:p,sp:sp});});
+  app.append(h('h1',{text:'Spending tracker'}));
+  app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'This month'}),
+    rows.length?h('div',{},rows.map(function(r){var left=r.p-r.sp;return h('div',{class:'money'},h('span',{text:r.c+': spent '+money(r.sp)+' of '+money(r.p)}),h('b',{text:left>=0?money(left)+' left':money(-left)+' over'}));})):h('p',{class:'hint',text:'Nothing tracked yet. Add what you spend and I will show what is left.'}),
+    h('div',{class:'stack',style:'margin-top:12px'},h('button',{onclick:function(){go(trackAdd);},text:'Add something I spent'}))));
+  var recent=cur.spent.slice(-8).reverse();
+  if(recent.length)app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Latest'}),h('ul',{class:'list'},recent.map(function(x){
+    return h('li',{class:'item'},h('span',{text:x.date+': '+x.cat+', '+money(x.amount)+' '}),h('button',{class:'ghost',onclick:function(){var k=cur.spent.indexOf(x);if(k>=0)cur.spent.splice(k,1);upsert(cur);show([trackHome]);},text:'Remove'}));}))));
+  app.append(h('div',{class:'stack'},h('button',{class:'ghost',onclick:function(){jump(result);},text:'Back to my budget'})));}
+function trackAdd(){var err=h('div',{class:'err',role:'alert'});var ai=numIn('t-amt','','Example: 12.50');
+  var sel=h('select',{id:'t-cat'},trackCats().map(function(c){return h('option',{value:c,text:c});}));
+  var form=h('form',{class:'card',onsubmit:function(ev){ev.preventDefault();var n=parseNum(ai.value);
+      if(n===null||n<=0){err.textContent='Type how much you spent, like 12 or 12.50.';ai.focus();return;}
+      var cat=sel.value,mo=todayStr().slice(0,7);cur.spent.push({date:todayStr(),cat:cat,amount:n});upsert(cur);
+      go(trackNote,{cat:cat,plan:planFor(cat),spent:spentIn(cat,mo),amt:n});}},
+    h('p',{class:'eyebrow',text:'Spending'}),h('h2',{text:'What did you spend?'}),
+    h('div',{class:'fld'},h('label',{for:'t-amt',text:'Dollars'}),ai),
+    h('div',{class:'fld'},h('label',{for:'t-cat',text:'What was it for?'}),sel),
+    h('p',{class:'hint',text:'I will save it with today\'s date.'}),err,
+    h('div',{class:'row'},h('button',{type:'button',class:'ghost',onclick:back,text:'Back'}),h('button',{type:'submit',text:'Save'})));
+  app.append(form);setTimeout(function(){ai.focus();},30);}
+function trackNote(o){var left=o.plan-o.spent,msg,cls='';
+  if(o.plan<=0){msg='Saved. You did not plan any money for '+o.cat.toLowerCase()+' this month. You have spent '+money(o.spent)+' on it so far.';cls='warn';}
+  else if(left<0){msg='Saved. Heads up: you are '+money(-left)+' over what you planned for '+o.cat.toLowerCase()+' this month.';cls='warn';}
+  else if(left<o.plan*0.2){msg='Saved. Careful: only '+money(left)+' left for '+o.cat.toLowerCase()+' this month.';cls='warn';}
+  else msg='Saved. You have '+money(left)+' left for '+o.cat.toLowerCase()+' this month.';
+  app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Spending'}),h('h2',{text:money(o.amt)+' for '+o.cat}),h('p',{class:cls,role:'status',text:msg}),
+    h('div',{class:'stack'},h('button',{onclick:function(){hist.pop();show([trackAdd]);},text:'Add another'}),h('button',{class:'green',onclick:function(){hist=[[result]];show([trackHome]);},text:'Done'}))));}
+
 /* ---------- results ---------- */
 function startEdit(fn,arg){editSnap=clone(cur);mode='edit';hist=[[result]];view=null;show([fn,arg]);}
-function restore(){if(editSnap){cur.hasCar=editSnap.hasCar;cur.incomes=editSnap.incomes;cur.expenses=editSnap.expenses;cur.extras=editSnap.extras;cur.debts=editSnap.debts;editSnap=null;}}
+function restore(){if(editSnap){cur.hasCar=editSnap.hasCar;cur.incomes=editSnap.incomes;cur.expenses=editSnap.expenses;cur.extras=editSnap.extras;cur.debts=editSnap.debts;cur.tax=editSnap.tax;editSnap=null;}}
 function debtSummary(){var owed=0,pay=0,int=0,bad=false;
   cur.debts.forEach(function(d){owed+=d.owed;pay+=d.payment;var a=d.owed>0?amortize(d.owed,d.apr,d.payment):{interest:0};if(a===null)bad=true;else int+=a.interest;});
   return {owed:owed,pay:pay,int:int,bad:bad};}
@@ -382,6 +512,12 @@ function result(){
   app.append(h('div',{class:'card'},h('div',{class:'money in'},h('span',{text:'Money coming in'}),h('b',{text:money(c.inc)+' / month'})),
     h('div',{class:'money'},h('span',{text:'Money going out'}),h('b',{text:money(c.exp)+' / month'})),pie(c,over,left)));
   if(cur.hasCar===true){var mi=catIndex('Car maintenance');if(mi>=0&&cur.expenses[mi].amount<25)app.append(h('div',{class:'card warn'},h('p',{text:'Tip: you have a car. Plan to set aside about $300 a year for oil changes and repairs. That is $25 a month, and your plan has '+money(cur.expenses[mi].amount)+'.'})));}
+  app.append(h('div',{class:'card'},h('h2',{text:'Spending tracker'}),h('p',{class:'hint',text:'Write down what you spend and see what is left in each part of your monthly budget.'}),
+    h('button',{class:'ghost',onclick:function(){go(trackHome);},text:'Track my spending'})));
+  if(cur.incomes.length){var tc=cur.tax?taxCalc(cur.tax):null;
+    app.append(h('div',{class:'card'},h('h2',{text:'Income tax'}),
+      tc?h('p',{class:tc.close?'warn':'',text:tc.close?'Too close to call. You may owe or get back about '+money(Math.abs(tc.diff))+'.':(tc.diff>0?'You may OWE about '+money(tc.diff)+' when you file.':'You may GET BACK about '+money(-tc.diff)+' when you file.')}):h('p',{class:'hint',text:'Use your pay stub to see if you may owe income tax.'}),
+      h('button',{class:'ghost',onclick:function(){startEdit(taxForm);},text:tc?'Redo income tax check':'Check my income tax'})));}
   if(cur.debts.length){var ds=debtSummary();
     app.append(h('div',{class:'card'},h('h2',{text:'Your debts'}),
     cur.debts.length>1?h('div',{},h('p',{class:'eyebrow',text:'All debts together'}),
@@ -503,6 +639,4 @@ function backupScreen(){
 load();home();
 })();
 </script>
-
-</body>
-</html>
+</body></html>
