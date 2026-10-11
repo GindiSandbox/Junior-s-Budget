@@ -247,6 +247,7 @@ function editDebt(i){var d=cur.debts[i];
     check:function(v){return dupForDebt({name:v.name,type:d.type});},apply:function(v){cur.debts[i]={type:d.type,name:v.name,owed:v.owed,apr:v.apr,aprGuess:(d.aprGuess===true&&v.apr===d.apr),payment:v.payment,prepayExtra:d.prepayExtra||0,prepayLump:d.prepayLump||0};}});}
 
 /* ---------- home ---------- */
+var VERSION='1.0';
 function home(){
   hist=[];view=null;cur=null;editSnap=null;app.textContent='';
   app.append(h('h1',{text:"Junior's Budget"}),h('p',{class:'hint',text:'Plan what comes in and what goes out. Your budgets are saved only on this phone.'}),h('p',{class:'hint',text:'Use your own phone so your budgets stay private.'}));
@@ -256,7 +257,7 @@ function home(){
   if(!db.length)list.append(h('p',{class:'hint',text:'No budgets yet. Tap New budget to make your first one.'}));
   app.append(h('div',{class:'card'},h('h2',{text:'Your budgets'}),list),
     h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'})),
-    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app. Nobody else can see your budgets.'}));}
+    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app. Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}));}
 function budgetRow(b){
   var c=compute(b);var row=h('div',{class:'stack'});
   function normal(){row.textContent='';
