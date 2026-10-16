@@ -44,6 +44,7 @@ p{margin:0 0 1rem}
 .row>*{flex:1 1 140px;min-width:0}
 button,.btn{font:inherit;font-weight:700;min-height:58px;padding:12px 18px;border-radius:12px;border:2px solid transparent;cursor:pointer;background:var(--accent);color:var(--accent-fg);text-align:center}
 button.ghost{background:var(--ghost);color:var(--fg);border-color:var(--line)}
+a.btn.ghost{background:var(--ghost);color:var(--fg);border:2px solid var(--line);border-radius:12px;padding:12px 18px;text-align:center;min-height:58px;box-sizing:border-box}
 button.green{background:var(--green);color:var(--on-color)}
 button.danger{background:var(--red);color:var(--on-color)}
 button.choice{text-align:left;background:var(--surface);color:var(--fg);border-color:var(--line)}
@@ -253,7 +254,8 @@ function editDebt(i){var d=cur.debts[i];
     check:function(v){return dupForDebt({name:v.name,type:d.type});},apply:function(v){cur.debts[i]={type:d.type,name:v.name,owed:v.owed,apr:v.apr,aprGuess:(d.aprGuess===true&&v.apr===d.apr),payment:v.payment,prepayExtra:d.prepayExtra||0,prepayLump:d.prepayLump||0};}});}
 
 /* ---------- home ---------- */
-var VERSION='2.0';
+var BILLS_URL='https://gindisandbox.github.io/Juniors-Bills/';
+var VERSION='2.1';
 function home(){
   hist=[];view=null;cur=null;editSnap=null;app.textContent='';
   app.append(h('h1',{text:"Junior's Budget"}),h('p',{class:'hint',text:'Plan what comes in and what goes out. Your budgets are saved only on this phone.'}),h('p',{class:'hint',text:'Use your own phone so your budgets stay private.'}));
@@ -262,7 +264,7 @@ function home(){
   db.forEach(function(b){list.append(budgetRow(b));});
   if(!db.length)list.append(h('p',{class:'hint',text:'No budgets yet. Tap New budget to make your first one.'}));
   app.append(h('div',{class:'card'},h('h2',{text:'Your budgets'}),list),
-    h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'})),
+    h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'}),h('a',{class:'btn ghost',href:BILLS_URL,style:'display:block;text-decoration:none;line-height:34px',text:"Bill reminders: open Junior's Bills"}),h('p',{class:'note',text:"Junior's Bills is a separate app. Save a backup here, then open it there to set due dates."})),
     h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app (on iPhone, tap the Share button, then Add to Home Screen). Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}));}
 function budgetRow(b){
   var c=compute(b);var row=h('div',{class:'stack'});
