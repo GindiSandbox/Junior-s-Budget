@@ -116,7 +116,7 @@ function monthsText(m){if(m>1200)return 'more than 100 years';var y=Math.floor(m
 
 /* ---------- data ---------- */
 function blank(name){return {hasCar:null,tax:null,spent:[],id:uid(),name:name||'',created:new Date().toISOString().slice(0,10),incomes:[],
-  expenses:CATS.map(function(c){return {name:c[0],amount:0};}),extras:[],debts:[]};}
+  expenses:CATS.map(function(c){return {name:c[0],amount:0};}),extras:[],debts:[],unknown:[]};}
 function clean(b){
   if(!b||typeof b!=='object')return null;
   var arr=function(x){return Array.isArray(x)?x.slice(0,100):[];};
@@ -125,6 +125,7 @@ function clean(b){
   out.incomes=arr(b.incomes).map(function(i){i=i||{};return {name:str(i.name,60),freq:freqOf(i.freq).k,amount:num(i.amount),gross:num(i.gross),stubDate:str(i.stubDate,10)};});
   var ex=arr(b.expenses);
   out.expenses=CATS.map(function(c){var f=ex.filter(function(e){return e&&e.name===c[0];})[0];return {name:c[0],amount:f?num(f.amount):0};});
+  out.unknown=arr(b.unknown).map(function(x){return str(x,60);}).filter(Boolean);
   out.extras=arr(b.extras).map(function(e){e=e||{};return {name:str(e.name,60),amount:num(e.amount)};});
   out.debts=arr(b.debts).map(function(d){d=d||{};return {type:(DTYPES.indexOf(d.type)>=0?d.type:'Other loan'),name:str(d.name,60),owed:num(d.owed),apr:num(d.apr),payment:num(d.payment),prepayExtra:num(d.prepayExtra),prepayLump:num(d.prepayLump),aprGuess:d.aprGuess===true};});
   var t=b.tax;out.tax=(t&&typeof t==='object')?{date:str(t.date,10),gross:num(t.gross),net:num(t.net),fedTax:num(t.fedTax),fedYtd:num(t.fedYtd),stTax:num(t.stTax),stYtd:num(t.stYtd),freq:freqOf(t.freq).k,other:num(t.other)}:null;
@@ -254,18 +255,79 @@ function editDebt(i){var d=cur.debts[i];
     check:function(v){return dupForDebt({name:v.name,type:d.type});},apply:function(v){cur.debts[i]={type:d.type,name:v.name,owed:v.owed,apr:v.apr,aprGuess:(d.aprGuess===true&&v.apr===d.apr),payment:v.payment,prepayExtra:d.prepayExtra||0,prepayLump:d.prepayLump||0};}});}
 
 /* ---------- home ---------- */
+
+/* ---------- simple mode (turned on by a helper), backup reminder ---------- */
+var SIMPLE='juniorBudget.simple',BK='juniorBudget.lastBackup',SN='juniorBudget.snooze',FS='juniorBudget.firstSeen',BK_DAYS=14;
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function isSimple(){return lsGet(SIMPLE)==='1';}
+function markBackup(){lsSet(BK,String(Date.now()));lsSet(SN,'');}
+function backupDue(){if(!db.length)return null;var now=Date.now(),sn=Number(lsGet(SN))||0;if(sn>now)return null;var last=Number(lsGet(BK))||Number(lsGet(FS))||now;var days=Math.floor((now-last)/864e5);return days>=BK_DAYS?{days:days,never:!lsGet(BK)}:null;}
+var SIMPLE_STEPS=[{k:'cat',n:'Rent or room',e:'🏠'},{k:'cat',n:'Food and groceries',e:'🛒'},{k:'cat',n:'Electric',e:'💡'},{k:'cat',n:'Water',e:'💧'},{k:'cat',n:'Phone',e:'📱'},{k:'cat',n:'Internet',e:'🌐'},{k:'cat',n:'Getting around',e:'🚌'},{k:'carq'},
+  {k:'grp',id:'car',title:'Car costs',hint:'Since you have a car, fill in all three. Each must be more than $0. Do NOT put a car loan payment here. A car loan goes under Debts.',names:['Car gas','Car insurance','Car maintenance']},
+  {k:'cat',n:'Fun',e:'🎬'},{k:'cat',n:'Savings',e:'🐷'},{k:'cat',n:'Other',e:'➕'}];
+function steps(){return isSimple()?SIMPLE_STEPS:EXSTEPS;}
+function stubPicture(){var svg='<svg viewBox="0 0 300 175" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Example pay stub. The NET PAY line is highlighted."><rect x="2" y="2" width="296" height="171" rx="8" fill="#ffffff" stroke="#8a94a0" stroke-width="2"/><text x="16" y="28" font-size="15" font-weight="700" fill="#1b2531">PAY STUB</text><text x="16" y="56" font-size="14" fill="#1b2531">Gross pay</text><text x="284" y="56" font-size="14" fill="#1b2531" text-anchor="end">600.00</text><text x="16" y="80" font-size="14" fill="#1b2531">Taxes</text><text x="284" y="80" font-size="14" fill="#1b2531" text-anchor="end">-120.00</text><rect x="10" y="98" width="280" height="34" rx="6" fill="#fff3b0" stroke="#e8790c" stroke-width="3"/><text x="18" y="121" font-size="16" font-weight="700" fill="#1b2531">NET PAY</text><text x="282" y="121" font-size="16" font-weight="700" fill="#1b2531" text-anchor="end">480.00</text><text x="150" y="160" font-size="13" fill="#b45309" text-anchor="middle" font-weight="700">Type this number</text></svg>';
+  var d=new DOMParser().parseFromString(svg,'image/svg+xml').documentElement;d.setAttribute('class','gsvg');return document.importNode(d,true);}
+function incNet(){var inp=numIn('f-net',draft.inc.amount||'','Example: 480'),err=h('div',{class:'err',role:'alert'}),f=freqOf(draft.inc.freq);
+  var form=h('form',{class:'card',onsubmit:function(ev){ev.preventDefault();var n=parseNum(inp.value);if(n===null||n<=0){err.textContent='Type the NET PAY number from your pay stub, like 480 or 480.50.';inp.focus();return;}
+    var it={name:draft.inc.name,freq:draft.inc.freq,amount:n,gross:0,stubDate:''},c=incomeCheck(it);
+    go(confirmScreen,{text:'You get '+money(n)+' '+f.label.toLowerCase()+'. That is about '+money(n*f.mult)+' a month.',warn:c.warn,yes:function(){cur.incomes.push(it);finishItem(incomeMore,draft.base);}});}},
+    h('p',{class:'eyebrow',text:'Income'}),h('h2',{text:'Look at your pay stub'}),h('p',{class:'hint',text:'Find the line that says NET PAY (or TAKE HOME). Type that number. Your stub may look a little different.'}),stubPicture(),
+    h('label',{for:'f-net',text:'NET PAY on my stub'}),inp,err,
+    h('div',{class:'stack'},h('button',{type:'submit',text:'Next'}),h('button',{type:'button',class:'ghost',onclick:function(){draft.inc.gross=0;draft.inc.stubDate='';draft.inc.stubFreq='';go(incAmt);},text:'I have no pay stub'}),h('button',{type:'button',class:'ghost',onclick:back,text:'Back'})));
+  app.append(form);setTimeout(function(){inp.focus();},30);}
+function simpleCat(si){var st=steps()[si],nm=st.n,i=catIndex(nm),c=CATS[i];
+  var inp=numIn('f-exp',cur.expenses[i].amount||'','0'),err=h('div',{class:'err',role:'alert'});
+  var note=(nm==='Getting around')?'Bus, rides, parking. Do NOT put a car loan here. A car loan goes under Debts.':(nm==='Other'?'Anything else you pay each month. Loan payments go under Debts, not here.':c[1]);
+  function setU(on){var k=cur.unknown.indexOf(nm);if(on&&k<0)cur.unknown.push(nm);if(!on&&k>=0)cur.unknown.splice(k,1);}
+  var form=h('form',{class:'card',onsubmit:function(ev){ev.preventDefault();var v=inp.value.trim();if(v===''){err.textContent="Type a number, or tap None or I don't know.";return;}var n=parseNum(v);if(n===null){err.textContent='Type just numbers, like 40 or 40.50.';return;}cur.expenses[i].amount=n;setU(false);adv(si+1);}},
+    h('p',{class:'eyebrow',text:'Expenses'}),h('h2',{text:st.e+' '+nm}),h('p',{class:'hint',text:note+' How much each month?'}),
+    h('label',{for:'f-exp',class:'hint',text:'Dollars per month'}),inp,err,
+    h('div',{class:'stack'},h('button',{type:'submit',text:'Next'}),h('button',{type:'button',class:'ghost',onclick:function(){cur.expenses[i].amount=0;setU(false);adv(si+1);},text:'None. I do not pay this.'}),h('button',{type:'button',class:'ghost',onclick:function(){cur.expenses[i].amount=0;setU(true);adv(si+1);},text:"I don't know"}),h('button',{type:'button',class:'ghost',onclick:back,text:'Back'})));
+  app.append(form);setTimeout(function(){inp.focus();},30);}
+function saveCopy(st,after){var f=null;try{f=new File([backupJson()],'juniors-budget-backup.json',{type:'application/json'});}catch(e){}
+  if(f&&navigator.share&&navigator.canShare&&navigator.canShare({files:[f]})){
+    navigator.share({files:[f],title:"Junior's Budget backup"}).then(function(){markBackup();st.textContent='Saved. Thank you!';if(after)after();}).catch(function(e){if(e&&e.name==='AbortError')st.textContent='Not saved yet. Tap the button to try again.';else backupScreen();});}
+  else backupScreen();}
+function saveCopyCard(){var st=h('p',{class:'note',role:'status',style:'font-weight:700'});
+  return h('div',{class:'card'},h('h2',{text:'Save a copy of my budget'}),h('p',{class:'hint',text:'Tap the button. Then tap Save to Files (or Notes). This keeps your budget safe if your phone clears its memory.'}),
+    h('button',{class:'green',style:'width:100%',onclick:function(){saveCopy(st);},text:'Save a copy of my budget'}),st);}
+function simpleExtras(){
+  var un=cur.unknown.filter(function(n){var k=catIndex(n);return k>=0&&cur.expenses[k].amount===0;});
+  if(un.length)app.append(h('div',{class:'card warn'},h('h2',{text:'Things to find out'}),h('p',{class:'hint',text:"You said you did not know these. Look at a bill or ask someone. Then tap Expenses below and type the amount."}),h('ul',{class:'list'},un.map(function(n){return h('li',{text:n});}))));
+  if(cur.hasCar===true&&!cur.debts.some(function(d){return d.type==='Car loan';}))app.append(h('div',{class:'card warn'},h('h2',{text:'Do you pay a car loan?'}),h('p',{class:'hint',text:'A car loan payment goes under Debts, not Expenses. If you have one, tap Debts below and add it.'})));
+  var dl=cur.debts.filter(function(d){return d.owed>0;});
+  if(dl.length){var card=h('div',{class:'card'},h('h2',{text:'What borrowing costs you'}));
+    dl.forEach(function(d){var nm=d.name||d.type,mi=d.owed*d.apr/1200,a=d.payment>0?amortize(d.owed,d.apr,d.payment):null,t;
+      if(d.payment<=0)t=nm+': you have no monthly payment set, so this debt will not go away.';
+      else if(!a)t=nm+': your payment of '+money(d.payment)+' is too small. The interest is about '+money(mi)+' a month. That is more than you pay, so the debt keeps growing.';
+      else if(!(d.apr>0))t=nm+': there is no interest on this one. Good.';
+      else t=nm+': the interest costs you about '+money(mi)+' this month. If you keep paying '+money(d.payment)+' a month, you will pay about '+money(a.interest)+' extra in interest, and it will take about '+monthsText(a.months)+'.';
+      card.append(h('p',{style:'font-size:1.1rem',text:t}));});
+    app.append(card);}}
+function helperScreen(){
+  var on=isSimple();
+  app.append(h('h1',{text:'Helper settings'}),h('p',{class:'hint',text:'For the person helping set this up.'}),
+    h('div',{class:'card'},h('h2',{text:'Simple mode is '+(on?'ON':'OFF')}),
+      h('p',{class:'hint',text:'Simple mode asks for the NET PAY from a pay stub, asks about one expense at a time with None and I don\'t know buttons, and hides the income tax check and the spending tracker. Debts, the debt graph and prepay stay.'}),
+      h('button',{class:on?'ghost':'green',style:'width:100%',onclick:function(){lsSet(SIMPLE,on?'0':'1');home();},text:on?'Turn Simple mode OFF':'Turn Simple mode ON'})),
+    h('div',{class:'card'},h('h2',{text:'Helper tips'}),
+      h('ul',{class:'list'},h('li',{text:'If the home screen icon is used, turn Simple mode on in the icon, not just in Safari. The icon keeps its own settings and budgets.'}),h('li',{text:'If his hours change, type the NET PAY from his most recent stub, or an average.'}),h('li',{text:'Car loan payments go under Debts, never under Expenses.'}),h('li',{text:'Bill reminders are in the separate Junior\'s Bills app. Set those up for him.'}))),
+    h('button',{class:'ghost',style:'width:100%',onclick:home,text:'Back'}));}
 var BILLS_URL='https://gindisandbox.github.io/Juniors-Bills/';
-var VERSION='2.1';
+var VERSION='2.2';
 function home(){
   hist=[];view=null;cur=null;editSnap=null;app.textContent='';
   app.append(h('h1',{text:"Junior's Budget"}),h('p',{class:'hint',text:'Plan what comes in and what goes out. Your budgets are saved only on this phone.'}),h('p',{class:'hint',text:'Use your own phone so your budgets stay private.'}));
   if(!storageOk)app.append(h('div',{class:'card warn'},h('p',{text:'This phone is not letting the page save. Use Save a backup so you do not lose your budgets.'})));
+  if(isSimple()){var bd=backupDue();if(bd)app.append(h('div',{class:'card warn'},h('p',{style:'font-size:1.15rem;font-weight:700',text:'Time to save a copy of your budget.'}),h('p',{class:'hint',text:(bd.never?'You have not saved a copy yet. ':'It has been '+bd.days+' days. ')+'It keeps your budget safe if your phone clears its memory.'}),h('div',{class:'row'},h('button',{class:'green',onclick:function(){saveCopy(h('p',{}),home);},text:'Save a copy now'}),h('button',{class:'ghost',onclick:function(){lsSet(SN,String(Date.now()+3*864e5));home();},text:'Remind me in 3 days'}))));}
   var list=h('div',{class:'stack'});
   db.forEach(function(b){list.append(budgetRow(b));});
   if(!db.length)list.append(h('p',{class:'hint',text:'No budgets yet. Tap New budget to make your first one.'}));
   app.append(h('div',{class:'card'},h('h2',{text:'Your budgets'}),list),
-    h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'}),h('a',{class:'btn ghost',href:BILLS_URL,style:'display:block;text-decoration:none;line-height:34px',text:"Bill reminders: open Junior's Bills"}),h('p',{class:'note',text:"Junior's Bills is a separate app. Save a backup here, then open it there to set due dates."})),
-    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app (on iPhone, tap the Share button, then Add to Home Screen). Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}));}
+    h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'}),isSimple()?null:h('a',{class:'btn ghost',href:BILLS_URL,style:'display:block;text-decoration:none;line-height:34px',text:"Bill reminders: open Junior's Bills"}),isSimple()?null:h('p',{class:'note',text:"Junior's Bills is a separate app. Save a backup here, then open it there to set due dates."})),
+    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app (on iPhone, tap the Share button, then Add to Home Screen). Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}),h('button',{class:'ghost',style:'margin-top:10px;min-height:44px;font-size:.9rem',onclick:function(){show([helperScreen]);},text:'Helper settings'}));}
 function budgetRow(b){
   var c=compute(b);var row=h('div',{class:'stack'});
   function normal(){row.textContent='';
@@ -294,7 +356,7 @@ function incomeMore(){
 function incName(){var i=textIn('f-inc',draft.inc.name,'Example: My job');
   ask({eyebrow:'Income',title:'Where does this money come from?',hint:'Examples: My job, SSI, Allowance.',input:i,label:'Name',onNext:function(v){v=v.trim();if(!v)return 'Please type something.';draft.inc.name=v.slice(0,60);go(incFreq);}});}
 function incFreq(){app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Income'}),h('h2',{text:'How often are you paid?'}),
-  h('div',{class:'stack'},FREQ.map(function(f){return h('button',{class:'choice',onclick:function(){draft.inc.freq=f.k;go(incStubQ);},text:f.label});}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
+  h('div',{class:'stack'},FREQ.map(function(f){return h('button',{class:'choice',onclick:function(){draft.inc.freq=f.k;go(isSimple()?incNet:incStubQ);},text:f.label});}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
 function incStubQ(){app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Income'}),h('h2',{text:'Do you have a pay stub?'}),
   h('p',{class:'hint',text:'A pay stub shows what you earned and what you took home. Use your most recent one so we can check your take-home pay.'}),
   h('div',{class:'stack'},h('button',{class:'choice',onclick:function(){go(incStub);},text:'Yes, I have my latest pay stub'}),h('button',{class:'choice',onclick:function(){draft.inc.gross=0;draft.inc.stubDate='';draft.inc.stubFreq='';go(incAmt);},text:'No stub (SSI, allowance, cash)'}),h('button',{class:'ghost',onclick:back,text:'Back'}))));}
@@ -325,26 +387,26 @@ function afterIncome(){if(mode==='edit')finishEdit();else go(debtMore);}
 var EXSTEPS=[{k:'cat',n:'Rent or room'},{k:'cat',n:'Food and groceries'},
   {k:'grp',id:'util',title:'Utilities',hint:'Fill in the bills you have. Leave a bill blank, or type 0, if you do not pay it.',names:['Electric','Gas (home)','Water','Trash','Phone','Internet','Cable or streaming']},
   {k:'cat',n:'Getting around'},{k:'carq'},
-  {k:'grp',id:'car',title:'Car costs',hint:'Since you have a car, fill in all three. Each must be more than $0.',names:['Car gas','Car insurance','Car maintenance']},
+  {k:'grp',id:'car',title:'Car costs',hint:'Since you have a car, fill in all three. Each must be more than $0. A car loan payment does NOT go here. It goes under Debts.',names:['Car gas','Car insurance','Car maintenance']},
   {k:'cat',n:'Fun'},{k:'cat',n:'Savings'},{k:'cat',n:'Other'}];
 function catIndex(nm){for(var i=0;i<CATS.length;i++)if(CATS[i][0]===nm)return i;return -1;}
 function adv(si){
-  if(si>=EXSTEPS.length){go(expMore);return;}
-  var st=EXSTEPS[si];
+  if(si>=steps().length){go(expMore);return;}
+  var st=steps()[si];
   if(st.k==='carq'&&draft.carAsked){adv(si+1);return;}
   if(st.k==='grp'&&st.id==='car'&&cur.hasCar===false){adv(si+1);return;}
   go(expFlow,si);}
-function expFlow(si){var st=EXSTEPS[si];if(st.k==='cat')catStep(si);else if(st.k==='grp')groupForm(si);else carQ(si);}
+function expFlow(si){var st=steps()[si];if(st.k==='cat')catStep(si);else if(st.k==='grp')groupForm(si);else carQ(si);}
 function carQ(si){
-  app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Expenses'}),h('h2',{text:'Do you have a car?'}),h('p',{class:'hint',text:'If yes, I will ask about car gas, car insurance and car maintenance (oil changes, tires, repairs).'}),
+  app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Expenses'}),h('h2',{text:'Do you have a car?'}),h('p',{class:'hint',text:'If yes, I will ask about car gas, car insurance and car maintenance (oil changes, tires, repairs). A car loan payment does not go in expenses. It goes under Debts.'}),
     h('div',{class:'stack'},
       h('button',{onclick:function(){cur.hasCar=true;draft.carAsked=true;adv(si+1);},text:'Yes, I have a car'}),
       h('button',{class:'ghost',onclick:function(){cur.hasCar=false;draft.carAsked=true;adv(si+1);},text:'No car'}),
       h('button',{class:'ghost',onclick:back,text:'Back'}))));}
-function catStep(si){var nm=EXSTEPS[si].n,i=catIndex(nm),c=CATS[i];
+function catStep(si){if(isSimple()){simpleCat(si);return;}var nm=steps()[si].n,i=catIndex(nm),c=CATS[i];
   var inp=numIn('f-exp',cur.expenses[i].amount||'','0');
   ask({eyebrow:'Expenses',title:nm,hint:c[1]+' How much per month? Type 0 if none.',input:inp,label:'Dollars per month',onNext:function(v){var n=parseNum(v===''?'0':v);if(n===null)return 'Type just numbers, like 40 or 40.50.';cur.expenses[i].amount=n;adv(si+1);}});}
-function groupForm(si){var st=EXSTEPS[si],inputs={},sel=null;var err=h('div',{class:'err',role:'alert'});
+function groupForm(si){var st=steps()[si],inputs={},sel=null;var err=h('div',{class:'err',role:'alert'});
   var fields=st.names.map(function(nm){var k=catIndex(nm),inp=numIn('g-'+k,cur.expenses[k].amount||'','0');inputs[nm]=inp;var extra=null;
     var lab=nm;
     if(nm==='Car insurance'){lab='Car insurance (each payment)';sel=h('select',{id:'g-ins-per','aria-label':'How often you pay car insurance'},[['Every month',1],['Every 6 months',6],['Once a year',12]].map(function(o){return h('option',{value:o[1],text:o[0]});}));extra=h('div',{class:'fld'},h('label',{for:'g-ins-per',text:'How often do you pay it?'}),sel,h('p',{class:'hint',text:'I will work out the monthly cost for you.'}));}
@@ -361,7 +423,7 @@ function groupForm(si){var st=EXSTEPS[si],inputs={},sel=null;var err=h('div',{cl
   app.append(form);}
 function expMore(){
   app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Expenses'}),h('h2',{text:cur.extras.length?'Other things you pay for':'Anything else you pay for?'}),
-    cur.extras.length?h('ul',{class:'list'},cur.extras.map(function(e,k){return rowEl(e.name+': '+money(e.amount)+' a month',function(){editExtra(k);});})):h('p',{class:'hint',text:'Was there something that was not on the list?'}),
+    cur.extras.length?h('ul',{class:'list'},cur.extras.map(function(e,k){return rowEl(e.name+': '+money(e.amount)+' a month',function(){editExtra(k);});})):h('p',{class:'hint',text:isSimple()?'Was there something that was not on the list? Do not add loan payments here. They go under Debts.':'Was there something that was not on the list?'}),
     h('div',{class:'stack'},
       h('button',{onclick:function(){draft.exMore=expMore;draft.base=baseFor(expMore);draft.ex={};go(exName);},text:cur.extras.length?'Add another':'Yes, add one'}),
       h('button',{class:'green',onclick:afterExpenses,text:cur.extras.length?"I'm done with expenses":'No, next'}),
@@ -381,7 +443,7 @@ function expList(){
       cur.extras.length?h('button',{class:'ghost',onclick:function(){cur.extras.pop();show([expList]);},text:'Remove last added one'}):null,
       h('button',{class:'ghost',onclick:back,text:'Back'}))));}
 function afterExpenses(){if(mode==='edit')finishEdit();else finishAll();}
-function afterDebts(){if(mode==='edit')finishEdit();else go(taxIntro);}
+function afterDebts(){if(mode==='edit')finishEdit();else if(isSimple())adv(0);else go(taxIntro);}
 /* debts */
 function debtMore(){
   app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Debts'}),h('h2',{text:cur.debts.length?'Your debts':'Any debt?'}),
@@ -521,12 +583,13 @@ function result(){
   app.append(h('div',{class:'card'},h('div',{class:'money in'},h('span',{text:'Money coming in'}),h('b',{text:money(c.inc)+' / month'})),
     h('div',{class:'money'},h('span',{text:'Money going out'}),h('b',{text:money(c.exp)+' / month'})),pie(c,over,left)));
   if(cur.hasCar===true){var mi=catIndex('Car maintenance');if(mi>=0&&cur.expenses[mi].amount<25)app.append(h('div',{class:'card warn'},h('p',{text:'Tip: you have a car. Plan to set aside about $300 a year for oil changes and repairs. That is $25 a month, and your plan has '+money(cur.expenses[mi].amount)+'.'})));}
-  app.append(h('div',{class:'card'},h('h2',{text:'Spending tracker'}),h('p',{class:'hint',text:'Write down what you spend and see what is left in each part of your monthly budget.'}),
+  if(!isSimple())app.append(h('div',{class:'card'},h('h2',{text:'Spending tracker'}),h('p',{class:'hint',text:'Write down what you spend and see what is left in each part of your monthly budget.'}),
     h('button',{class:'ghost',onclick:function(){go(trackHome);},text:'Track my spending'})));
-  if(cur.incomes.length){var tc=cur.tax?taxCalc(cur.tax):null;
+  if(cur.incomes.length&&!isSimple()){var tc=cur.tax?taxCalc(cur.tax):null;
     app.append(h('div',{class:'card'},h('h2',{text:'Income tax'}),
       tc?h('p',{class:tc.close?'warn':'',text:tc.close?'Too close to call. You may owe or get back about '+money(Math.abs(tc.diff))+'.':(tc.diff>0?'You may OWE about '+money(tc.diff)+' when you file.':'You may GET BACK about '+money(-tc.diff)+' when you file.')}):h('p',{class:'hint',text:'Use your pay stub to see if you may owe income tax.'}),
       h('button',{class:'ghost',onclick:function(){startEdit(taxForm);},text:tc?'Redo income tax check':'Check my income tax'})));}
+  if(isSimple())simpleExtras();
   if(cur.debts.length){var ds=debtSummary();
     app.append(h('div',{class:'card'},h('h2',{text:'Your debts'}),
     cur.debts.length>1?h('div',{},h('p',{class:'eyebrow',text:'All debts together'}),
@@ -537,6 +600,7 @@ function result(){
     h('div',{class:'stack'},cur.debts.map(function(d,k){var n=debtNote(d);
     return h('div',{class:'stack'},h('p',{},h('span',{class:'pill '+n.tone,text:n.tone==='bad'?'Warning':'On track'}),n.text),
       h('button',{class:'ghost',onclick:function(){go(debtGraph,k);},text:'Graph and prepay: '+(d.name||'debt')}));}))));}
+  if(isSimple())app.append(saveCopyCard());
   app.append(h('div',{class:'bar'},h('div',{class:'inner'},
     h('button',{class:'green',onclick:function(){startEdit(incomeMore);},text:'Income'}),
     h('button',{onclick:function(){startEdit(expList);},text:'Expenses'}),
@@ -636,8 +700,8 @@ function backupScreen(){
   app.append(h('h1',{text:'Backups'}),h('p',{class:'hint',text:'A backup is a copy of all your budgets. Keep one safe in case this phone clears its data.'}),
     h('div',{class:'card'},h('h2',{text:'Save a backup'}),
       h('div',{class:'stack'},
-        h('button',{onclick:function(){try{var bl=new Blob([backupJson()],{type:'application/json'});var u=URL.createObjectURL(bl);var a=document.createElement('a');a.href=u;a.download='juniors-budget-backup.json';document.body.append(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u);},2000);status.textContent='If a file did not download, use Copy backup text instead.';}catch(e){status.textContent='Download is blocked here. Use Copy backup text instead.';}},text:'Save a file to my phone'}),
-        h('button',{class:'ghost',onclick:function(){out.focus();out.select();var done=function(){status.textContent='Copied. Paste it into the Notes app to keep it.';};
+        h('button',{onclick:function(){try{var bl=new Blob([backupJson()],{type:'application/json'});var u=URL.createObjectURL(bl);var a=document.createElement('a');a.href=u;a.download='juniors-budget-backup.json';document.body.append(a);a.click();a.remove();markBackup();setTimeout(function(){URL.revokeObjectURL(u);},2000);status.textContent='If a file did not download, use Copy backup text instead.';}catch(e){status.textContent='Download is blocked here. Use Copy backup text instead.';}},text:'Save a file to my phone'}),
+        h('button',{class:'ghost',onclick:function(){out.focus();out.select();var done=function(){markBackup();status.textContent='Copied. Paste it into the Notes app to keep it.';};
           if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(out.value).then(done,function(){status.textContent='Text is selected. Tap Copy in the pop-up.';});}else{status.textContent='Text is selected. Tap Copy in the pop-up.';}},text:'Copy backup text'}),
         out)),
     h('div',{class:'card'},h('h2',{text:'Load a backup'}),
@@ -646,6 +710,7 @@ function backupScreen(){
     status,h('button',{class:'ghost',style:'width:100%',onclick:home,text:'Back to my budgets'}));}
 
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
+if(!lsGet(FS))lsSet(FS,String(Date.now()));
 load();home();
 })();
 </script>
