@@ -1,4 +1,10 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body><title>Junior's Budget</title>
+<!doctype html><html lang="en"><head>
+<meta name="theme-color" content="#27599b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Junior's Budget">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"></head><body><title>Junior's Budget</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
@@ -247,7 +253,7 @@ function editDebt(i){var d=cur.debts[i];
     check:function(v){return dupForDebt({name:v.name,type:d.type});},apply:function(v){cur.debts[i]={type:d.type,name:v.name,owed:v.owed,apr:v.apr,aprGuess:(d.aprGuess===true&&v.apr===d.apr),payment:v.payment,prepayExtra:d.prepayExtra||0,prepayLump:d.prepayLump||0};}});}
 
 /* ---------- home ---------- */
-var VERSION='1.0';
+var VERSION='2.0';
 function home(){
   hist=[];view=null;cur=null;editSnap=null;app.textContent='';
   app.append(h('h1',{text:"Junior's Budget"}),h('p',{class:'hint',text:'Plan what comes in and what goes out. Your budgets are saved only on this phone.'}),h('p',{class:'hint',text:'Use your own phone so your budgets stay private.'}));
@@ -257,7 +263,7 @@ function home(){
   if(!db.length)list.append(h('p',{class:'hint',text:'No budgets yet. Tap New budget to make your first one.'}));
   app.append(h('div',{class:'card'},h('h2',{text:'Your budgets'}),list),
     h('div',{class:'stack'},h('button',{class:'green',onclick:newBudget,text:'New budget'}),h('button',{class:'ghost',onclick:backupScreen,text:'Save or load a backup'})),
-    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app. Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}));}
+    h('p',{class:'note',style:'margin-top:18px',text:'Tip: add this page to your Home Screen so it opens like an app (on iPhone, tap the Share button, then Add to Home Screen). Nobody else can see your budgets.'}),h('p',{class:'note',text:'Version '+VERSION}));}
 function budgetRow(b){
   var c=compute(b);var row=h('div',{class:'stack'});
   function normal(){row.textContent='';
@@ -312,7 +318,7 @@ function incStub(){var err=h('div',{class:'err',role:'alert'});
 function incAmt(){var i=numIn('f-incamt',draft.inc.amount,'Example: 250.50');
   ask({eyebrow:'Income',title:'How much is each paycheck?',hint:'Type the amount you actually receive each time.',input:i,label:'Dollars',onNext:function(v){var n=parseNum(v);if(n===null)return 'Type just numbers, like 250 or 250.50.';
     var it={name:draft.inc.name,freq:draft.inc.freq,amount:n,gross:0,stubDate:''},c=incomeCheck(it);go(confirmScreen,{text:c.text,warn:c.warn,yes:function(){cur.incomes.push(it);finishItem(incomeMore,draft.base);}});}});}
-function afterIncome(){if(mode==='edit')finishEdit();else go(taxIntro);}
+function afterIncome(){if(mode==='edit')finishEdit();else go(debtMore);}
 /* expenses */
 var EXSTEPS=[{k:'cat',n:'Rent or room'},{k:'cat',n:'Food and groceries'},
   {k:'grp',id:'util',title:'Utilities',hint:'Fill in the bills you have. Leave a bill blank, or type 0, if you do not pay it.',names:['Electric','Gas (home)','Water','Trash','Phone','Internet','Cable or streaming']},
@@ -372,14 +378,15 @@ function expList(){
       h('button',{class:'green',onclick:finishEdit,text:"I'm done with expenses"}),
       cur.extras.length?h('button',{class:'ghost',onclick:function(){cur.extras.pop();show([expList]);},text:'Remove last added one'}):null,
       h('button',{class:'ghost',onclick:back,text:'Back'}))));}
-function afterExpenses(){if(mode==='edit')finishEdit();else go(debtMore);}
+function afterExpenses(){if(mode==='edit')finishEdit();else finishAll();}
+function afterDebts(){if(mode==='edit')finishEdit();else go(taxIntro);}
 /* debts */
 function debtMore(){
   app.append(h('div',{class:'card'},h('p',{class:'eyebrow',text:'Debts'}),h('h2',{text:cur.debts.length?'Your debts':'Any debt?'}),
     cur.debts.length?h('ul',{class:'list'},cur.debts.map(function(d,k){return rowEl(d.name+': owe '+money(d.owed)+', '+d.apr+'% APR'+(d.aprGuess?' (estimate)':'')+', pay '+money(d.payment)+' a month',function(){editDebt(k);});})):h('p',{class:'hint',text:'Do you owe money on anything? (loans, credit cards, phone payments)'}),
     h('div',{class:'stack'},
       h('button',{onclick:function(){draft.base=baseFor(debtMore);draft.d={};go(dType);},text:cur.debts.length?'Add another':'Yes, add a debt'}),
-      h('button',{class:'green',onclick:finishAll,text:cur.debts.length?"I'm done with debts":'No, show my budget'}),
+      h('button',{class:'green',onclick:afterDebts,text:cur.debts.length?"I'm done with debts":'No debts, next'}),
       cur.debts.length?h('button',{class:'ghost',onclick:function(){cur.debts.pop();show([debtMore]);},text:'Remove last one'}):null,
       h('button',{class:'ghost',onclick:back,text:'Back'}))));}
 function defaultDebtName(t){if(t==='Other loan')return '';var n=cur.debts.filter(function(x){return x.type===t;}).length+1;return (n===1&&t!=='Credit card')?t:t+' '+n;}
@@ -636,6 +643,7 @@ function backupScreen(){
         h('button',{onclick:function(){if(inp.value.trim())loadText(inp.value);else status.textContent='Paste a backup first, or choose a file.';},text:'Load pasted backup'}))),
     status,h('button',{class:'ghost',style:'width:100%',onclick:home,text:'Back to my budgets'}));}
 
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
 load();home();
 })();
 </script>
