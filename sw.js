@@ -1,6 +1,6 @@
-// Junior's Budget service worker (v2.2): lets the app open with no internet.
+// Junior's Bills service worker (v1.7): lets the app open with no internet.
 // Same-site files are cached. The page is fetched fresh when online (so updates arrive) and falls back to the saved copy when offline or slow.
-var CACHE = 'junior-budget-v2.2';
+var CACHE = 'junior-bills-v1.7';
 var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
@@ -18,7 +18,7 @@ self.addEventListener('fetch', function (e) {
   if (r.mode === 'navigate') {
     e.respondWith(
       Promise.race([
-        fetch(r).then(function (res) { var cp = res.clone(); caches.open(CACHE).then(function (c) { c.put('index.html', cp); }); return res; }),
+        fetch(r).then(function (res) { if (res && res.ok) { var cp = res.clone(); caches.open(CACHE).then(function (c) { c.put('index.html', cp); }); } return res; }),
         new Promise(function (_, rej) { setTimeout(rej, 3000); })
       ]).catch(function () { return caches.match('index.html').then(function (m) { return m || caches.match('./'); }); })
     );
